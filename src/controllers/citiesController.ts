@@ -69,16 +69,22 @@ export default class citiesControllers{
             });
             
         } catch (error){
+            console.error("Error creating city:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: `Error to Create City.`,
-                details: error
+                message: `Error to Create City.`
             });
             return;
         }
     }
 
     async getCityById(req: AuthRequest, res: Response){
-        const { cityId } = req.body
+        // Query params têm prioridade; body mantido como fallback de compatibilidade
+        const cityId = Number(req.query.cityId ?? req.body?.cityId)
+
+        if (isNaN(cityId)) {
+            res.status(400).json({ message: `cityId must be a valid number.` });
+            return;
+        }
 
         try{
             const city = await this.citiesService.getCityById(cityId)
@@ -95,13 +101,12 @@ export default class citiesControllers{
             });
             return;
         } catch (error){
+            console.error("Error searching city:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: `Error to Search City.`,
-                details: error
+                message: `Error to Search City.`
             });
             return;
         }
-
     }
 
     async getAllCities(req: AuthRequest, res: Response){
@@ -171,10 +176,9 @@ export default class citiesControllers{
             return;
 
         } catch (error) {
-            console.error(error);
+            console.error("Error deleting city:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: "Error to delete city.",
-                details: error
+                message: "Error to delete city."
             });
             return;
         }
@@ -220,9 +224,9 @@ export default class citiesControllers{
             });
             return;
         } catch (error) {
+            console.error("Error in city dashboard:", error instanceof Error ? error.message : error);
             res.status(500).json({
                 message: `Internal Server Error (500)`,
-                details: error,
             });
             return;
         }

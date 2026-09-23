@@ -1,5 +1,3 @@
-import { Request, Response } from "express"
-import router from "../router"
 import connection from "../connection"
 
 interface UserData{
@@ -30,7 +28,24 @@ export default class UserService {
     }
 
     async getUserById(userId: number){
-        return await connection('users').where({ id: userId }).select('*').first();
+        return await connection('users')
+            .where({ id: userId })
+            .select(
+                'id',
+                'nameUser',
+                'fullName',
+                'email',
+                'telefone',
+                'birth_date',
+                'role',
+                'city_id',
+                'neighborhood_id',
+                'avatar_url',
+                'is_verified',
+                'provider',
+                'created_at'
+            )
+            .first();
     }
 
     async getUserByName(fullName: string){
@@ -38,7 +53,21 @@ export default class UserService {
     }
 
     async getAllUsers(){
-        return await connection('users').select('*');
+        return await connection('users').select(
+            'id',
+            'nameUser',
+            'fullName',
+            'email',
+            'telefone',
+            'birth_date',
+            'role',
+            'city_id',
+            'neighborhood_id',
+            'avatar_url',
+            'is_verified',
+            'provider',
+            'created_at'
+        );
     }
 
     async deleteUser(userId: number){

@@ -1,10 +1,8 @@
-import { Request, Response } from "express";
-import { connect } from "http2";
+import { Response } from "express";
 import CitiesService from "../services/citiesService";
 import NeighborHoodService from "../services/neighborhoodService";
 import { AuthRequest } from "../types/express";
 import connection from "../connection";
-import { authPlugins } from "mysql2";
 
 export default class neighborhoodsControllers{
     constructor(
@@ -32,7 +30,7 @@ export default class neighborhoodsControllers{
         }
 
         try{
-            const { name, city_id, latitude, longitude, created_by } = req.body
+            const { name, city_id, latitude, longitude } = req.body
             const user = req.user
             
             const city = await this.citiesService.getCityById(city_id)
@@ -45,7 +43,7 @@ export default class neighborhoodsControllers{
                 return;
             };
             
-            if( !name || !city_id || !latitude || !longitude || created_by ){
+            if( !name || !city_id || !latitude || !longitude ){
                 res.status(400).json({
                     message: `Please complete all required fields.`
                 });
@@ -71,9 +69,9 @@ export default class neighborhoodsControllers{
             });
 
         } catch(error){
+            console.error("Error creating neighborhood:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: `Error to create new NeighborHood.`,
-                details: error
+                message: `Error to create new NeighborHood.`
             });
             return;
         }
@@ -97,7 +95,9 @@ export default class neighborhoodsControllers{
             });
             return;
         }
-        const { neighborhood_id, city_id } = req.body
+        // Query params têm prioridade; body mantido como fallback de compatibilidade
+        const neighborhood_id = Number(req.query.neighborhood_id ?? req.body?.neighborhood_id);
+        const city_id = Number(req.query.city_id ?? req.body?.city_id);
 
         try{
             const user = req.user
@@ -108,17 +108,17 @@ export default class neighborhoodsControllers{
                     return;
                 };
 
-            const neighborhood = await this.neighborhoodService.getNeighborhoodById(neighborhood_id, city_id)
-            if(!neighborhood){
-                res.status(404).json({
-                    message: `Neighborhood not found, verify NeighborhoodID.`
+            if(isNaN(neighborhood_id) || isNaN(city_id)){
+                res.status(400).json({
+                    message: `Please complete all required fields.`
                 });
                 return;
             }
 
-            if(!neighborhood_id || !city_id ){
-                res.status(400).json({
-                    message: `Please complete all required fields.`
+            const neighborhood = await this.neighborhoodService.getNeighborhoodById(neighborhood_id, city_id)
+            if(!neighborhood){
+                res.status(404).json({
+                    message: `Neighborhood not found, verify NeighborhoodID.`
                 });
                 return;
             }
@@ -129,16 +129,26 @@ export default class neighborhoodsControllers{
             });
             return;
         } catch(error){
+            console.error("Error searching neighborhood:", error instanceof Error ? error.message : error);
             res.status(500).json({
                 message: `Error to Search Neighborhood.`,
-                details: error,
             });
         }
     }
 
     async getAllNeighborhoods(req: AuthRequest, res: Response){
-        const {city_id} = req.body
-        const city = await this.citiesService.getCityById(city_id)
+        // Query params têm prioridade; body mantido como fallback de compatibilidade
+        const city_id = Number(req.query.city_id ?? req.body?.city_id)
+
+        if (isNaN(city_id)) {
+            res.status(400).json({
+                message: `city_id must be a valid number.`
+            });
+            return;
+        }
+
+        try{
+            const city = await this.citiesService.getCityById(city_id)
             if(!city){
                 res.status(404).json({
                     message: `City Not found, please check City_Id.`
@@ -146,15 +156,14 @@ export default class neighborhoodsControllers{
                 return;
             }
 
-        try{
             const neighborhoods = await this.neighborhoodService.getAllNeighborhood(city_id)
                 
-                if(!neighborhoods){
-                    res.status(404).json({
-                        message: `${city.name} don't have neighborhoods. Verify City_ID.`
-                    });
-                    return;
-                }
+            if(!neighborhoods){
+                res.status(404).json({
+                    message: `${city.name} don't have neighborhoods. Verify City_ID.`
+                });
+                return;
+            }
 
             res.status(201).json({
                 message: `/// ${city.name} - Neighborhoods Informations. `,
@@ -162,7 +171,11 @@ export default class neighborhoodsControllers{
             });
             return;
         } catch(error) {
-
+            console.error("Error listing neighborhoods:", error instanceof Error ? error.message : error);
+            res.status(500).json({
+                message: `Internal Server Error (500)`
+            });
+            return;
         }
     }
     
@@ -190,15 +203,23 @@ export default class neighborhoodsControllers{
             return;
         }
         catch(error) {
+            console.error("Error searching neighborhoods by city:", error instanceof Error ? error.message : error);
             res.status(500).json({
                 message: `Error to Search Neighborhoods by City.`,
-                details: error,
             });
         }
     }
 
     async delNeighborhood(req: AuthRequest, res: Response){
         const { neighborhood_id, city_id } = req.body
+        const userRole = Number(req.user?.role);
+
+        if (!req.user || (userRole !== 1 && userRole !== 2)) {
+            res.status(403).json({
+                message: `You don't have permission to delete neighborhood.`
+            });
+            return;
+        }
 
         try{
             const city = await this.citiesService.getCityById(city_id)
@@ -216,20 +237,61 @@ export default class neighborhoodsControllers{
             });
             return;
         } catch(error){
+            console.error("Error deleting neighborhood:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: `Error to delete Neighborhood.`,
-                details: error
+                message: `Error to delete Neighborhood.`
             });
         }
     }
 
     
     async dashboardNeighborhood(req: AuthRequest, res: Response){
-        const { city_id, neighborhood_id } = req.body   
+        // Query params têm prioridade; body mantido como fallback de compatibilidade
+        const city_id = Number(req.query.city_id ?? req.body?.city_id);
+        const neighborhood_id = Number(req.query.neighborhood_id ?? req.body?.neighborhood_id);
+        const requester = req.user;
+        const userRole = Number(requester?.role);
+
+        if (!requester) {
+            res.status(401).json({ message: `User not authenticated.` });
+            return;
+        }
+
+        const isAdmin = userRole === 1 || userRole === 2;
+        const isPrefeito = userRole === 7;
+
+        if (!isAdmin && !isPrefeito) {
+            res.status(403).json({
+                message: `You don't have permission to access this dashboard.`
+            });
+            return;
+        }
+
+        // Prefeito só pode consultar a própria cidade associada ao token
+        if (isPrefeito && Number(requester.city_id) !== city_id) {
+            res.status(403).json({
+                message: `Prefeito can only access the dashboard of their own city.`
+            });
+            return;
+        }
+
+        if (isNaN(city_id) || isNaN(neighborhood_id)) {
+            res.status(400).json({
+                message: `city_id and neighborhood_id must be valid numbers.`
+            });
+            return;
+        }
 
         try{
             const city = await this.citiesService.getCityById(city_id);
             const neighboorhood = await this.neighborhoodService.getNeighborhoodById(neighborhood_id, city_id)
+
+            if(!city || !neighboorhood){
+                res.status(404).json({
+                    message: `City or Neighborhood not found.`
+                });
+                return;
+            }
 
             const totalAccountInNeighborhood = await this.neighborhoodService.TotalAccountInNeighborhood(neighborhood_id, city_id);
             const allReportsByNeighborhood = await this.neighborhoodService.getAllReportsByNeighborhood(neighborhood_id, city_id);
@@ -244,6 +306,7 @@ export default class neighborhoodsControllers{
 
 
         } catch(error){
+            console.error("Error in neighborhood dashboard:", error instanceof Error ? error.message : error);
             res.status(500).json({
                 message: `Internal Server Error (500)`
             });

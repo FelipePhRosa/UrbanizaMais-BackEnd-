@@ -10,13 +10,21 @@ export default class ReportControllers{
         private citiesService = new CitiesService()
     ){}
 
-    async createReport(req: Request, res: Response) {
-        const userId = Number(req.params.userId);
+    async createReport(req: AuthRequest, res: Response) {
+        const authenticatedUserId = Number(req.user?.id);
+        const paramUserId = Number(req.params.userId);
 
-        if (isNaN(userId)) {
-            res.status(400).json({ error: "userID is not valid." });
+        if (!authenticatedUserId) {
+            res.status(401).json({ error: "User not authenticated." });
             return;
         }
+
+        if (!isNaN(paramUserId) && paramUserId !== authenticatedUserId) {
+            res.status(403).json({ error: "You can only create reports for yourself." });
+            return;
+        }
+
+        const userId = authenticatedUserId;
 
         try{
             const { reportTitle, category_id, description, city_id, neighborhood_id, address, latitude, longitude } = req.body
@@ -60,9 +68,9 @@ export default class ReportControllers{
             return;
 
         } catch(error){
+            console.error("Error creating report:", error instanceof Error ? error.message : error);
             res.status(500).json({ 
-                message: `Error to create Report.`, 
-                details: error})
+                message: `Error to create Report.`})
             return;
         }
     }
@@ -70,9 +78,6 @@ export default class ReportControllers{
     async approveReport(req: AuthRequest, res: Response){
         const reportId  = Number(req.params.reportId);
         const userId  = req.user?.id
-        console.log("Report ID:", reportId);
-        console.log("User ID from token:", userId);
-        console.log("User Role: ", req.user?.role);
 
         if (isNaN(reportId) || !userId) {
             return res.status(400).json({ error: "Invalid reportId or userId." });
@@ -119,9 +124,9 @@ export default class ReportControllers{
             });
 
         } catch(error){
+            console.error("Error approving report:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: `Internal Server Error.`,
-                details: error
+                message: `Internal Server Error.`
             });
         }
     }
@@ -169,17 +174,26 @@ export default class ReportControllers{
             await connection('reports').where({ id: reportId }).update({ status: 'rejeitado' , approved_by: userId  });
 
             return res.status(200).json({
-                message: `Report ${reportId} declined by ${user.nome}`
+                message: `Report ${reportId} declined by ${user.nameUser}`
             })
         } catch(error){
+            console.error("Error declining report:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: `Internal Server Error.`,
-                details: error
+                message: `Internal Server Error.`
             });
         }
     }
 
-    async getAllReportsDecline(req: Request, res: Response){
+    async getAllReportsDecline(req: AuthRequest, res: Response){
+        const userRole = Number(req.user?.role);
+
+        if (!req.user || userRole > 2) {
+            res.status(403).json({
+                message: `You don't have permissions for that action.`
+            });
+            return;
+        }
+
         try{
             const DeclineReports = await this.reportService.getAllReportsRejected();
 
@@ -188,14 +202,23 @@ export default class ReportControllers{
                 data: DeclineReports
             })
         } catch(error){
+            console.error("Error listing declined reports:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: `Internal Server Error`,
-                details: error
+                message: `Internal Server Error`
             })
         }
     }
 
-    async getAllReportsPending(req: Request, res: Response){
+    async getAllReportsPending(req: AuthRequest, res: Response){
+        const userRole = Number(req.user?.role);
+
+        if (!req.user || userRole > 2) {
+            res.status(403).json({
+                message: `You don't have permissions for that action.`
+            });
+            return;
+        }
+
         try{
             const PendingReports = await this.reportService.getAllReportsPending();
 
@@ -204,9 +227,9 @@ export default class ReportControllers{
                 data: PendingReports
             });
         } catch(error){
+            console.error("Error listing pending reports:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: `Internal Server Error.`,
-                details: error
+                message: `Internal Server Error.`
             });
         }
     }
@@ -216,7 +239,9 @@ export default class ReportControllers{
         const userRole = Number(req.user?.role);
 
         try{
-            const { city_id, status } = req.body
+            // Query params têm prioridade; body mantido como fallback de compatibilidade
+            const city_id = Number(req.query.city_id ?? req.body?.city_id);
+            const status = (req.query.status ?? req.body?.status) as string | undefined;
 
             if(!user){
                 res.status(404).json({
@@ -228,6 +253,13 @@ export default class ReportControllers{
             if(userRole > 2){
                 res.status(403).json({
                     message: `You don't have permissions for that action.`
+                });
+                return;
+            }
+
+            if(isNaN(city_id)){
+                res.status(400).json({
+                    message: `city_id must be a valid number.`
                 });
                 return;
             }
@@ -247,9 +279,9 @@ export default class ReportControllers{
             return;
 
         } catch ( error ){
+            console.error("Error listing reports by city:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: `Internal Server Error - 500`,
-                details: error
+                message: `Internal Server Error - 500`
             });
             return;
         }
@@ -266,9 +298,9 @@ export default class ReportControllers{
 
             return;
         } catch(error){
+            console.error("Error listing reports:", error instanceof Error ? error.message : error);
             res.status(500).json({ 
-                message: `Internal Server Error. `, 
-                details: error});
+                message: `Internal Server Error. `});
             return;
         }
     }
@@ -321,13 +353,7 @@ export default class ReportControllers{
     }
 
     async getReportById(req: AuthRequest, res: Response) {
-        const { id } = req.params; // <-- mudança aqui, pega de params ao invés de body
-        const user = req.user
-        const userId = req.user?.id;
-
-        console.log('=== DEBUG GET REPORT BY ID ===');
-        console.log('Report ID:', id);
-        console.log('User ID:', userId);
+        const { id } = req.params;
 
         if (isNaN(Number(id))) {
             res.status(400).json({ error: "id must be a valid number." });
@@ -336,30 +362,30 @@ export default class ReportControllers{
 
         try {
             const report = await this.reportService.getReportById(Number(id));
-            
-            console.log('Report result:', {
-            id: report?.id,
-            likes: report?.likes,
-            likedByCurrentUser: report?.likedByCurrentUser
-        });
 
             res.status(200).json({ 
                 message: `Informations for Report {${id}}`,
                 reportInf: report 
             });
         } catch (error) {
+            console.error("Error searching report:", error instanceof Error ? error.message : error);
             res.status(500).json({ 
-                message: `Error Internal Server.`,
-                details: error 
+                message: `Error Internal Server.`
             });
         }
     }
 
-    async deleteReport(req: Request, res: Response) {
+    async deleteReport(req: AuthRequest, res: Response) {
         try{
-            const { reportId } = req.body
+            const reportId = Number(req.body?.reportId);
+            const requester = req.user;
 
-            if (isNaN(reportId)) {
+            if (!requester) {
+                res.status(401).json({ error: "User not authenticated." });
+                return;
+            }
+
+            if (!req.body?.reportId || isNaN(reportId)) {
                 res.status(400).json({ error: "reportId must be a valid number." });
                 return;
             }
@@ -367,6 +393,15 @@ export default class ReportControllers{
             
             if(!report){
                 res.status(404).json({ error: `Report not found.`});
+                return;
+            }
+
+            const requesterRole = Number(requester.role);
+            const isOwnerOfReport = Number(report.user_id) === Number(requester.id);
+            const isModeration = requesterRole === 1 || requesterRole === 2;
+
+            if (!isOwnerOfReport && !isModeration) {
+                res.status(403).json({ error: `You can only delete your own reports.` });
                 return;
             }
 
@@ -379,9 +414,9 @@ export default class ReportControllers{
             return;
 
         } catch(error){
+            console.error("Error deleting report:", error instanceof Error ? error.message : error);
             res.status(500).json({ 
-                message: `Error Internal Server.`, 
-                details: error });
+                message: `Error Internal Server.` });
             return;
         }
     }
@@ -403,9 +438,9 @@ export default class ReportControllers{
             });
             return;
         } catch (error) {
+            console.error("Error listing my reports:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: 'Internal Server Error (500)',
-                details: error
+                message: 'Internal Server Error (500)'
             });
             return;
         }
@@ -428,9 +463,9 @@ export default class ReportControllers{
                 details: reportsFiltred
             })
         } catch(error){
+            console.error("Error listing reports by city:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: 'Internal Server Error (500)',
-                details: error
+                message: 'Internal Server Error (500)'
             })
         }
     }

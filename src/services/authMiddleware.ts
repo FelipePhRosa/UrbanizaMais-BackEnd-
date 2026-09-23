@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from "express";
 import AuthService from "./authService";
 import connection from "../connection";
 import { AuthRequest } from "../types/express";
+import { Role } from "../enums/types";
 
 const authService = new AuthService();
 // Middleware para verificar se o usuário está autenticado
@@ -31,15 +32,20 @@ export const authenticate = async (
       return
     }
 
+    if (Number(user.role) === Role.Banned) {
+      res.status(403).json({ error: "Access denied: account suspended." });
+      return
+    }
+
     req.user = {
-      id: decoded.userId,
-      email: decoded.email,
-      fullName: decoded.fullName,
-      role: decoded.role,
-      avatar_url: decoded.avatar_url,
-      telefone: decoded.telefone,
-      city_id: decoded.city_id,
-      neighborhood_id: decoded.neighborhood_id
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: Number(user.role),
+      avatar_url: user.avatar_url,
+      telefone: user.telefone,
+      city_id: user.city_id,
+      neighborhood_id: user.neighborhood_id
     };
 
     next();
@@ -48,23 +54,3 @@ export const authenticate = async (
     return
   }
 };
-
-export const isOwner = async ( //dia 26/09/25 nao lembro do propósito disso pq sempre usei o authenticate nas rotas, e no controller fazia a validação da role, então, nao sei pra que tem isso mas vou deixa pra caso eu lembre
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const user = await connection('users')
-        .where({ id: req.user?.id })
-        .first();
-
-      if (!user?.isOwner) {
-        return res.status(403).json({ error: "Acess Denied: You need been Owner." });
-      }
-
-      next();
-    } catch (error) {
-      return res.status(500).json({ error: "Error server to verify Owner." });
-    }
-  };

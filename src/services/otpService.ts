@@ -1,7 +1,9 @@
 import { Resend } from 'resend';
 import connection from '../connection';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
 
 function generateOTP(length: number = 6): string {
   const digits = '0123456789';

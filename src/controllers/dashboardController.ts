@@ -35,9 +35,9 @@ export default class DashboardController {
                 topNeighborhoods,
             });
         } catch (error) {
+            console.error("Error in admin dashboard:", error instanceof Error ? error.message : error);
             res.status(500).json({
                 message: `Internal Server Error.`,
-                details: error,
             });
         }
     }
@@ -82,9 +82,9 @@ export default class DashboardController {
                 recentReports,
             });
         } catch (error) {
+            console.error("Error in city admin dashboard:", error instanceof Error ? error.message : error);
             res.status(500).json({
                 message: `Internal Server Error.`,
-                details: error,
             });
         }
     }

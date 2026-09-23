@@ -4,12 +4,11 @@ import cors from "cors"
 import router from "./router"
 import path from "path"
 import rateLimit from 'express-rate-limit';
-import connection from "./connection"
 
 dotenv.config()
 
 const server = express()
-const PORT = 3000
+const PORT = Number(process.env.PORT) || 3000
 
 server.set('trust proxy', 1);
 const limiter = rateLimit({
@@ -24,7 +23,14 @@ server.use(cors({
     credentials: true
 }));
 
-server.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+server.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
+    index: false,
+    dotfiles: 'ignore',
+    setHeaders: (res) => {
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'");
+    }
+}));
 server.use(express.json());
 server.use(router)
 

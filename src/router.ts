@@ -1,6 +1,5 @@
 import { RequestHandler } from 'express';
 import { Router } from "express";
-import multer from 'multer';
 import ReportControllers from "./controllers/reportController";
 import UserController from "./controllers/userController";
 import AuthController from "./controllers/AuthController";
@@ -8,7 +7,7 @@ import CitiesControllers from './controllers/citiesController';
 import DashboardController from './controllers/dashboardController';
 import neighborhoodsControllers from './controllers/neighborhoodsController';
 import { authenticate } from './services/authMiddleware';
-import upload from './services/upload'
+import { uploadSingle } from './services/upload'
 
 const router = Router();
 const userController = new UserController();
@@ -49,7 +48,7 @@ router.post('/loginMidia', authController.socialLogin.bind(authController) as un
 router.get("/auth/google/callback", authController.googleCallback.bind(authController) as unknown as RequestHandler); 
 router.post('/register', userController.createUser.bind(userController));
 
-router.post('/report/:userId', authenticate, upload.single('imagem'), reportControllers.createReport.bind(reportControllers));
+router.post('/report/:userId', authenticate, uploadSingle('imagem'), reportControllers.createReport.bind(reportControllers) as RequestHandler);
 router.post('/report/:reportId/like', authenticate, userController.userLiked.bind(userController))
 
 router.post('/approveReport/:reportId', authenticate, reportControllers.approveReport.bind(reportControllers) as RequestHandler);
@@ -60,7 +59,7 @@ router.post('/cr_neighborhood', authenticate, neighborHoodsControllers.createNei
 
 router.post('/updateRole', authenticate, userController.updateRole.bind(userController));
 
-router.put('/api/user/update', authenticate, upload.single("avatar"), userController.updateUserInfo.bind(userController));
+router.put('/api/user/update', authenticate, uploadSingle("avatar"), userController.updateUserInfo.bind(userController) as RequestHandler);
 
 router.post('/auth/login-otp', userController.verifyLoginOTP.bind(userController));
 router.post('/auth/verify-otp', userController.verifyOTPOnly.bind(userController));
@@ -70,9 +69,9 @@ router.post('/resetpass', userController.resetPassword.bind(userController));
 router.get('/admin', authenticate, dashboardController.dashboardAdmin.bind(dashboardController));
 router.get('/admin/:cityId', authenticate, dashboardController.dashboardAdminByCity.bind(dashboardController));
 router.get('/dashboard', authenticate, citiesControllers.dashboardByCity.bind(citiesControllers));
-router.get('/dashboardNeighbordoor', neighborHoodsControllers.dashboardNeighborhood.bind(neighborHoodsControllers));
+router.get('/dashboardNeighborhood', authenticate, neighborHoodsControllers.dashboardNeighborhood.bind(neighborHoodsControllers) as RequestHandler);
 
-router.get('/userList', userController.listAllUsers.bind(userController));
+router.get('/userList', authenticate, userController.listAllUsers.bind(userController));
 router.get('/userById', userController.listUserById.bind(userController));
 router.get('/myreports', authenticate, reportControllers.getMyReports.bind(reportControllers));
 router.get('/reportList', reportControllers.getAllReports.bind(reportControllers));
@@ -85,14 +84,14 @@ router.get('/reportsByCity', authenticate, reportControllers.getAllReportsByCity
 router.get('/report/:id', reportControllers.getReportById.bind(reportControllers));
 router.get('/report/:id/like', authenticate, reportControllers.getLikeStatus.bind(reportControllers));
 router.get('/report/:id/likes', reportControllers.getAllLikes.bind(reportControllers));
-router.get('/reportPending', reportControllers.getAllReportsPending.bind(reportControllers));
-router.get('/reportDecline', reportControllers.getAllReportsDecline.bind(reportControllers));
+router.get('/reportPending', authenticate, reportControllers.getAllReportsPending.bind(reportControllers) as RequestHandler);
+router.get('/reportDecline', authenticate, reportControllers.getAllReportsDecline.bind(reportControllers) as RequestHandler);
 router.get('/likes/:reportId', reportControllers.getAllLikes.bind(reportControllers));
 
-router.delete('/delUser', userController.deleteUser.bind(userController));
+router.delete('/delUser', authenticate, userController.deleteUser.bind(userController) as RequestHandler);
 router.delete('/delCity', authenticate, citiesControllers.deleteCity.bind(citiesControllers));
 router.delete('/delNeighborhood', authenticate, neighborHoodsControllers.delNeighborhood.bind(neighborHoodsControllers));
-router.delete('/delReport', reportControllers.deleteReport.bind(reportControllers));
+router.delete('/delReport', authenticate, reportControllers.deleteReport.bind(reportControllers) as RequestHandler);
 
 export default router;
     

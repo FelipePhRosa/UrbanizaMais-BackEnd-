@@ -14,7 +14,6 @@ export default class AuthController {
 
   // Login tradicional
   async login(req: Request, res: Response) {
-    console.log("Login Request Body:", req.body);
     const { identifier, password } = req.body;
 
     try {
@@ -54,7 +53,7 @@ export default class AuthController {
       });
 
     } catch (error) {
-      console.error("Login error:", error);
+      console.error("Login error:", error instanceof Error ? error.message : error);
       return res.status(401).json({ error: "Invalid credentials" });
     }
   }
@@ -76,7 +75,7 @@ async socialLogin(req: Request, res: Response) {
     return res.status(200).json(loginResult);
 
   } catch (error) {
-    console.error('Social login error:', error);
+    console.error('Social login error:', error instanceof Error ? error.message : error);
     const errorMessage =
       error instanceof Error
         ? error.message
@@ -109,10 +108,9 @@ async socialLogin(req: Request, res: Response) {
       });
 
       const tokenData = await tokenResp.json();
-      console.log('Google token response:', tokenData);
 
       if (!tokenResp.ok) {
-        return res.status(400).json({ error: 'Failed to exchange code with Google', details: tokenData });
+        return res.status(400).json({ error: 'Failed to exchange code with Google' });
       }
 
       const accessToken = tokenData.access_token;
@@ -122,7 +120,6 @@ async socialLogin(req: Request, res: Response) {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
       const userInfo = await userResp.json();
-      console.log('Google userinfo:', userInfo);
 
       const payload = {
         email: userInfo.email,
@@ -148,7 +145,7 @@ async socialLogin(req: Request, res: Response) {
       const redirectUrl = `${frontendUrl}/auth/callback?token=${encodeURIComponent(result.token)}&user=${userParam}`;
       return res.redirect(redirectUrl);
     } catch (err) {
-      console.error('Error in googleCallback:', err);
+      console.error('Error in googleCallback:', err instanceof Error ? err.message : err);
       return res.status(500).send('Internal server error');
     }
   }

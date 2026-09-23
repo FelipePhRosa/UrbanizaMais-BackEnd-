@@ -4,7 +4,7 @@ enum Reportstatus {
     REJEITADO = 'rejeitado'
 };
 
-enum Role {
+export enum Role {
     Owner = 1,
     Admin = 2,
     Moderador = 3,

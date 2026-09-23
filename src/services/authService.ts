@@ -48,17 +48,12 @@ export default class AuthService {
 
   async login(credentials: LoginCredentials) {
     try {
-      console.log("Login attempt:", credentials);
-
-      
       const identifierClean = credentials.identifier.trim().toLowerCase();
 
       const user = await connection("users")
         .whereRaw("LOWER(TRIM(email)) = ?", [identifierClean])
         .orWhereRaw("LOWER(TRIM(nameUser)) = ?", [identifierClean])
         .first();
-
-      console.log("User found:", user);
 
       if (!user) {
         throw new Error("Invalid Credentials");
@@ -68,8 +63,6 @@ export default class AuthService {
         credentials.password,
         user.password_hash
       );
-
-      console.log("Password valid:", isPasswordValid);
 
       if (!isPasswordValid) {
         throw new Error("Invalid Credentials");
@@ -102,14 +95,14 @@ export default class AuthService {
         isNewUser: false
       };
     } catch (error) {
-      console.error("Login error:", error);
+      console.error("Login error:", error instanceof Error ? error.message : error);
       throw error;
     }
   }
 
 async socialLogin(credentials: SocialLoginCredentials) {
     try {
-      console.log("Login Attemp: ", credentials);
+      console.log("Social login attempt:", { provider: credentials?.provider });
 
       if (
         !credentials ||
@@ -163,9 +156,9 @@ async socialLogin(credentials: SocialLoginCredentials) {
 
           user = await connection("users").where("id", newUserId).first();
           if (!user) {
-            console.log("Error to create user: ", credentials.name)
+            console.error("Failed to create social login user for provider:", credentials.provider)
           } else {
-            console.log("Created New User: ", user);
+            console.log("Created new social user id:", user.id);
           }
         }
       const token = this.generateToken({
@@ -195,7 +188,7 @@ async socialLogin(credentials: SocialLoginCredentials) {
         needsVerification: user.is_verified === 0
       };
     } catch (err) {
-      console.log("Error when logging in", err)
+      console.error("Social login error:", err instanceof Error ? err.message : err)
       throw err;
     }
   }
