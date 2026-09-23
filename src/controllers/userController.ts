@@ -6,6 +6,7 @@ import { AuthRequest } from "../types/express";
 import OTPService from "../services/otpService";
 import AuthService from "../services/authService";
 import validatePassword from "../errors/validatePassword";
+import { Role } from "../enums/types";
 
 interface UpdateUserInfoDTO{
     fullName?: string,
@@ -21,7 +22,6 @@ export default class UserController{
     
     async createUser(req: Request, res: Response) {
         try{
-            console.log("REQ.BODY =>", req.body);
             const { nameUser, fullName, email, birth_date, city_id, neighborhood_id, password, role, avatar_url, telefone, is_verified } = req.body
 
             const hashedPassword = await bcrypt.hash(password, 10);
@@ -70,10 +70,9 @@ export default class UserController{
             return;
 
         } catch (error) {
-            console.error("Erro no createUser:", error);
+            console.error("Erro no createUser:", error instanceof Error ? error.message : error);
             res.status(500).json({
                 message: "Error to insert new User.",
-                details: error instanceof Error ? error.message : error,
             });
             return;
         }
@@ -162,8 +161,17 @@ export default class UserController{
         }
     }
 
-    async listAllUsers(req: Request, res: Response) {
+    async listAllUsers(req: AuthRequest, res: Response) {
         try {
+            const requesterRole = Number(req.user?.role);
+
+            if (!req.user || (requesterRole !== Role.Owner && requesterRole !== Role.Admin)) {
+                res.status(403).json({
+                    message: `You don't have permission to list all users.`
+                });
+                return;
+            }
+
             const users = await this.userService.getAllUsers()
             const stats = await this.userService.getUsersWithReportStats()
             
@@ -184,15 +192,16 @@ export default class UserController{
             data: usersWithStats
             })
         } catch(error) {
+            console.error("Error listing users:", error instanceof Error ? error.message : error);
             res.status(500).json({ 
-                message:`Internal Server Error.`, 
-                details: error });
+                message:`Internal Server Error.`});
             return;
         }
     }
 
     async listUserById (req: Request, res: Response) {
-        const { userId } = req.body
+        // Query params têm prioridade; body mantido como fallback de compatibilidade
+        const userId = Number(req.query.userId ?? req.body?.userId)
         try {
             const user = await this.userService.getUserById(userId)
             if (!user){
@@ -204,32 +213,59 @@ export default class UserController{
                 userInf: user });
             return;
         } catch(error) {
+            console.error("Error searching user:", error instanceof Error ? error.message : error);
             res.status(500).json({ 
-                message: `Error to Search User.`,
-                details: error });
+                message: `Error to Search User.`});
             return;
         }
     }
 
-    async deleteUser(req: Request, res: Response) {
-        const { userId } = req.body
+    async deleteUser(req: AuthRequest, res: Response) {
+        const userId = Number(req.body?.userId);
+        const requester = req.user;
 
-        if (isNaN(userId)) {
+        if (!requester) {
+            res.status(401).json({ message: `User not authenticated.` });
+            return;
+        }
+
+        if (!req.body?.userId || isNaN(userId)) {
             res.status(400).json({ error: "userId must be a valid number." });
             return;
         }
         try {
             const user = await this.userService.getUserById(userId)
 
+            if (!user) {
+                res.status(404).json({ message: `User not found.` });
+                return;
+            }
+
+            const requesterRole = Number(requester.role);
+            const targetRole = Number(user.role);
+            const isSelf = userId === Number(requester.id);
+            const isAdmin = requesterRole === Role.Owner || requesterRole === Role.Admin;
+
+            if (!isSelf) {
+                if (!isAdmin) {
+                    res.status(403).json({ message: `You don't have permission to delete other users.` });
+                    return;
+                }
+                if (requesterRole >= targetRole) {
+                    res.status(403).json({ message: `You can only delete users with a lower role than yours.` });
+                    return;
+                }
+            }
+
             await this.userService.deleteUser(userId)
             res.status(200).json({ 
-                message: `${user.nome} was deleted successfully!`,
+                message: `${user.fullName} was deleted successfully!`,
                 deleteuser: user });
             return;
         } catch(error) {
+            console.error("Error deleting user:", error instanceof Error ? error.message : error);
             res.status(500).json({ 
-                message: `Error to delete user.`,
-                details: error});
+                message: `Error to delete user.`});
             return;
         }
     }
@@ -273,12 +309,11 @@ export default class UserController{
             return;
 
         } catch (error) {
-            console.error('Error to like.', error);
+            console.error('Error to like:', error instanceof Error ? error.message : error);
 
             if (!res.headersSent) {
                 res.status(500).json({
-                    message: `Error to Like report`,
-                    details: error
+                    message: `Error to Like report`
                 });
             } else {
                 console.warn('Resposta já foi enviada, não é possível retornar erro novamente.');
@@ -312,6 +347,15 @@ export default class UserController{
                 });
                 return;
             }
+
+            const validRoles = Object.values(Role).filter(v => typeof v === 'number') as number[];
+            if (!validRoles.includes(Number(newRole))) {
+                res.status(400).json({
+                    message: `Invalid role. Use one of the existing roles.`
+                });
+                return;
+            }
+
             const user = await this.userService.getUserById(userId);
 
             if(!user){
@@ -332,6 +376,14 @@ export default class UserController{
                 res.status(403).json({
                     message: `You don't have permissions for that action. Saving Log.`
                 })
+                return;
+            }
+
+            if (Number(newRole) === Role.Owner && Number(requester.role) !== Role.Owner) {
+                res.status(403).json({
+                    message: `Only the Owner can grant the Owner role.`
+                });
+                return;
             }
 
             await this.userService.updateRole(userId, newRole);
@@ -341,10 +393,9 @@ export default class UserController{
             });
 
         } catch(error){
-            console.error("Error to update new role:", error);
+            console.error("Error to update new role:", error instanceof Error ? error.message : error);
             res.status(500).json({
-                message: `Error to update new role.`,
-                details: error instanceof Error ? error.message : error
+                message: `Error to update new role.`
             });
             return;
         }
@@ -401,10 +452,12 @@ export default class UserController{
             });
 
         } catch (error) {
-            console.error('Erro ao atualizar usuário:', error);
+            const message = error instanceof Error ? error.message : '';
+            const knownCodes = ['EMAIL_ALREADY_IN_USE', 'INVALID_EMAIL_FORMAT', 'USER_NOT_FOUND'];
+            console.error('Erro ao atualizar usuário:', message || error);
             res.status(500).json({
                 message: "Internal Server Error",
-                details: error instanceof Error ? error.message : error,
+                ...(knownCodes.includes(message) ? { details: message } : {}),
             });
         }
     }
@@ -479,10 +532,9 @@ export default class UserController{
             });
             return;
         } catch (error) {
-            console.error("Error in verifyLoginOTP:", error);
+            console.error("Error in verifyLoginOTP:", error instanceof Error ? error.message : error);
             res.status(500).json({
             message: "Internal server error.",
-            details: error instanceof Error ? error.message : error,
             });
             return;
         }
@@ -512,10 +564,9 @@ export default class UserController{
             return;
 
         } catch (error) {
-            console.error("Erro ao verificar OTP:", error);
+            console.error("Erro ao verificar OTP:", error instanceof Error ? error.message : error);
             res.status(500).json({
                 message: "Erro interno do servidor.",
-                details: error,
             });
             return;
         }
@@ -560,9 +611,9 @@ export default class UserController{
             return;
 
         } catch (error) {
+            console.error('Erro ao reenviar OTP:', error instanceof Error ? error.message : error);
             res.status(500).json({
                 message: 'Internal server error.',
-                details: error
             });
             return;
         }
