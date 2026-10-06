@@ -19,7 +19,10 @@ const limiter = rateLimit({
 
 
 server.use(cors({
-    origin: "http://localhost:5173",
+    origin: [
+        "http://localhost:5173",
+        "https://urbanizamais.com"
+    ],
     credentials: true
 }));
 
