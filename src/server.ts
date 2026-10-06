@@ -31,7 +31,8 @@ server.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
         res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'");
     }
 }));
-server.use(express.json());
+// 1mb: uma notícia longa guarda todos os blocos num único JSON.
+server.use(express.json({ limit: "1mb" }));
 server.use(router)
 
 server.listen(PORT, '0.0.0.0', () => {

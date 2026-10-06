@@ -234,40 +234,86 @@ export default class ReportControllers{
         }
     }
 
+    // Resolve a cidade-alvo das consultas de relatos conforme o papel autenticado:
+    // roles 1/2 (admins da plataforma) escolhem qualquer cidade via query/body;
+    // role 7 (prefeito) fica preso à cidade do próprio token.
+    private resolveReportCityScope(
+        req: AuthRequest
+    ): { cityId: number } | { error: { status: number; message: string } } {
+        const requester = req.user;
+
+        if (!requester) {
+            return { error: { status: 404, message: `Searcher not authenticated or not founded.` } };
+        }
+
+        const userRole = Number(requester.role);
+
+        if (userRole === 7) {
+            const tokenCity = Number(requester.city_id);
+            if (!tokenCity || isNaN(tokenCity)) {
+                return { error: { status: 400, message: `Prefeito não possui cidade associada.` } };
+            }
+
+            const requestedCity = req.query.city_id ?? req.body?.city_id;
+            if (requestedCity !== undefined && Number(requestedCity) !== tokenCity) {
+                return { error: { status: 403, message: `Prefeito só pode consultar relatórios da própria cidade.` } };
+            }
+
+            return { cityId: tokenCity };
+        }
+
+        if (userRole === 1 || userRole === 2) {
+            const cityId = Number(req.query.city_id ?? req.body?.city_id);
+            if (isNaN(cityId)) {
+                return { error: { status: 400, message: `city_id must be a valid number.` } };
+            }
+            return { cityId };
+        }
+
+        return { error: { status: 403, message: `You don't have permissions for that action.` } };
+    }
+
     async getAllReportsByCity(req: AuthRequest, res: Response){
-        const user = Number(req.user?.id);
-        const userRole = Number(req.user?.role);
-
         try{
-            // Query params têm prioridade; body mantido como fallback de compatibilidade
-            const city_id = Number(req.query.city_id ?? req.body?.city_id);
+            const resolved = this.resolveReportCityScope(req);
+            if ('error' in resolved) {
+                res.status(resolved.error.status).json({
+                    message: resolved.error.message
+                });
+                return;
+            }
+            const city_id = resolved.cityId;
+
             const status = (req.query.status ?? req.body?.status) as string | undefined;
-
-            if(!user){
-                res.status(404).json({
-                    message: `Searcher not authenticated or not founded.`
-                });
-                return;
-            }
-
-            if(userRole > 2){
-                res.status(403).json({
-                    message: `You don't have permissions for that action.`
-                });
-                return;
-            }
-
-            if(isNaN(city_id)){
-                res.status(400).json({
-                    message: `city_id must be a valid number.`
-                });
-                return;
-            }
-
             const validStatuses = ['pendente', 'aprovado', 'rejeitado'];
-            const statusFilter = status && validStatuses.includes(status) ? status : undefined;
+            if (status !== undefined && !validStatuses.includes(status)) {
+                res.status(400).json({
+                    message: `Invalid status. Allowed values: ${validStatuses.join(', ')}.`
+                });
+                return;
+            }
 
-            const reports = await this.reportService.getAllReportsByCity(city_id, statusFilter);
+            const neighborhoodRaw = req.query.neighborhood_id ?? req.body?.neighborhood_id;
+            let neighborhood_id: number | undefined;
+            if (neighborhoodRaw !== undefined) {
+                neighborhood_id = Number(neighborhoodRaw);
+                if (!neighborhood_id || isNaN(neighborhood_id)) {
+                    res.status(400).json({
+                        message: `neighborhood_id must be a valid number.`
+                    });
+                    return;
+                }
+
+                const neighborhood = await connection('neighborhoods').where({ id: neighborhood_id, city_id }).first();
+                if (!neighborhood) {
+                    res.status(400).json({
+                        message: `Invalid neighborhood for this city.`
+                    });
+                    return;
+                }
+            }
+
+            const reports = await this.reportService.getAllReportsByCity(city_id, status, neighborhood_id);
 
             const city = await this.citiesService.getCityById(city_id)
 
@@ -280,6 +326,44 @@ export default class ReportControllers{
 
         } catch ( error ){
             console.error("Error listing reports by city:", error instanceof Error ? error.message : error);
+            res.status(500).json({
+                message: `Internal Server Error - 500`
+            });
+            return;
+        }
+    }
+
+    async getNeighborhoodReportsStats(req: AuthRequest, res: Response){
+        try{
+            const resolved = this.resolveReportCityScope(req);
+            if ('error' in resolved) {
+                res.status(resolved.error.status).json({
+                    message: resolved.error.message
+                });
+                return;
+            }
+            const city_id = resolved.cityId;
+
+            const stats = await this.reportService.getNeighborhoodReportStats(city_id);
+
+            const city = await this.citiesService.getCityById(city_id)
+
+            res.status(200).json({
+                message: `// Neighborhood reports stats for ${city.name}`,
+                data: stats.map((row) => ({
+                    id: Number(row.id),
+                    name: row.name,
+                    pending: Number(row.pending),
+                    approved: Number(row.approved),
+                    rejected: Number(row.rejected),
+                    total: Number(row.total)
+                }))
+            });
+
+            return;
+
+        } catch ( error ){
+            console.error("Error listing neighborhood report stats:", error instanceof Error ? error.message : error);
             res.status(500).json({
                 message: `Internal Server Error - 500`
             });
@@ -354,6 +438,7 @@ export default class ReportControllers{
 
     async getReportById(req: AuthRequest, res: Response) {
         const { id } = req.params;
+        const requester = req.user;
 
         if (isNaN(Number(id))) {
             res.status(400).json({ error: "id must be a valid number." });
@@ -362,6 +447,12 @@ export default class ReportControllers{
 
         try {
             const report = await this.reportService.getReportById(Number(id));
+
+            // Prefeito visualiza apenas relatórios da própria cidade.
+            if (report && requester && Number(requester.role) === 7 && Number(report.city_id) !== Number(requester.city_id)) {
+                res.status(403).json({ message: `Prefeito só pode visualizar relatórios da própria cidade.` });
+                return;
+            }
 
             res.status(200).json({ 
                 message: `Informations for Report {${id}}`,

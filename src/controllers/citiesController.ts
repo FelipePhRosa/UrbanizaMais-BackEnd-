@@ -109,9 +109,30 @@ export default class citiesControllers{
         }
     }
 
-    async getAllCities(req: AuthRequest, res: Response){
+    async getAllStates(req: Request, res: Response){
         try {
-            const cities = await connection('cities').select('id', 'name');
+            const states = await this.citiesService.getAllStates();
+            res.json(states);
+            return;
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ message: 'Erro ao buscar estados' });
+            return;
+        }
+    }
+
+    async getAllCities(req: AuthRequest, res: Response){
+        // Query params têm prioridade; body mantido como fallback de compatibilidade
+        const stateIdRaw = req.query.state_id ?? req.body?.state_id;
+        const stateId = Number(stateIdRaw);
+
+        if (stateIdRaw !== undefined && isNaN(stateId)) {
+            res.status(400).json({ message: 'state_id must be a valid number.' });
+            return;
+        }
+
+        try {
+            const cities = await this.citiesService.getAllCities(stateIdRaw !== undefined ? stateId : undefined);
             res.json(cities); 
             return; 
         } catch (err) {
@@ -217,6 +238,7 @@ export default class citiesControllers{
 
             res.status(200).json({
                 message: `Total de reports e População na cidade ${city.name}`,
+                city_id: prefeito.city_id,
                 TotalReports: totalReports,
                 AllReports: AllReports,
                 TotalPopulationCity: totalPopulationCity,

@@ -24,12 +24,34 @@ export default class UserController{
         try{
             const { nameUser, fullName, email, birth_date, city_id, neighborhood_id, password, role, avatar_url, telefone, is_verified } = req.body
 
-            const hashedPassword = await bcrypt.hash(password, 10);
-            if (!nameUser || !fullName || !email || !password || !birth_date || !city_id || !neighborhood_id || !telefone || !city_id) {
+            if (!nameUser || !fullName || !email || !password || !birth_date || !city_id) {
                 res.status(400).json({
                     message: `Please complete all required fields.`
                 });
                 return;
+            }
+
+            const hashedPassword = await bcrypt.hash(password, 10);
+
+            const cityExists = await connection('cities').where({ id: city_id }).first();
+            if (!cityExists) {
+                res.status(400).json({
+                    message: `City not found, verify City_Id.`
+                });
+                return;
+            }
+
+            // Bairro é opcional; quando informado precisa pertencer à cidade selecionada
+            if (neighborhood_id !== undefined && neighborhood_id !== null && neighborhood_id !== '') {
+                const neighborhoodBelongsToCity = await connection('neighborhoods')
+                    .where({ id: neighborhood_id, city_id })
+                    .first();
+                if (!neighborhoodBelongsToCity) {
+                    res.status(400).json({
+                        message: `Neighborhood does not belong to the selected city.`
+                    });
+                    return;
+                }
             }
 
             const birthDateObj = new Date(birth_date);
@@ -58,11 +80,11 @@ export default class UserController{
                 birth_date,
                 telefone, 
                 city_id,
-                neighborhood_id,
+                neighborhood_id: neighborhood_id || null,
                 password_hash: hashedPassword,
                 role: role ?? 5,
                 avatar_url,
-                is_verified: 1
+                is_verified: 0
             })
             res.status(201).json({ 
                 message: `User: ${fullName}, registered successfully`

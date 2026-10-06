@@ -80,14 +80,41 @@ async getAllReports(userId?: number, role?: string) {
         return await connection('reports').where({ status: 'rejeitado' }).select('*')
     }
 
-    async getAllReportsByCity(city_id: number, status?: string) {
-        const query = connection('reports').where({ city_id });
+    async getAllReportsByCity(city_id: number, status?: string, neighborhood_id?: number) {
+        const query = connection('reports')
+            .leftJoin('neighborhoods', 'reports.neighborhood_id', 'neighborhoods.id')
+            .where('reports.city_id', city_id);
 
         if (status) {
-            query.andWhere({ status });
+            query.andWhere('reports.status', status);
         }
 
-        return await query.select('*');
+        if (neighborhood_id) {
+            query.andWhere('reports.neighborhood_id', neighborhood_id);
+        }
+
+        return await query.select('reports.*', 'neighborhoods.name as neighborhood_name').orderBy('reports.created_at', 'desc');
+    }
+
+    async getNeighborhoodReportStats(city_id: number) {
+        const countByStatus = (status: string) => connection('reports')
+            .count('*')
+            .whereRaw('reports.neighborhood_id = neighborhoods.id AND reports.city_id = ?', [city_id])
+            .andWhere({ status });
+
+        return await connection('neighborhoods')
+            .where({ city_id })
+            .orderBy('name')
+            .select('id', 'name')
+            .select(
+                countByStatus('pendente').as('pending'),
+                countByStatus('aprovado').as('approved'),
+                countByStatus('rejeitado').as('rejected'),
+                connection('reports')
+                    .count('*')
+                    .whereRaw('reports.neighborhood_id = neighborhoods.id AND reports.city_id = ?', [city_id])
+                    .as('total')
+            );
     }
 
 

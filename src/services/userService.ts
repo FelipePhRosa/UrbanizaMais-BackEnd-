@@ -8,7 +8,7 @@ interface UserData{
     password_hash: string,
     telefone: string,
     city_id: number,
-    neighborhood_id: number,
+    neighborhood_id: number | null,
     role: number,
     avatar_url: string,
     is_verified: number

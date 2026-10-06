@@ -15,8 +15,21 @@ export default class CitiesService {
         return await connection('cities').insert(citiesData);
     }
 
-    async getAllCities(){
-        return await connection('cities').select('*')
+    async getAllStates(){
+        return await connection('states').select('id', 'name', 'uf').orderBy('name', 'asc');
+    }
+
+    async getAllCities(stateId?: number){
+        const query = connection('cities')
+            .join('states', 'cities.state_id', 'states.id')
+            .select('cities.id', 'cities.name', 'cities.state_id', 'states.uf')
+            .orderBy('cities.name', 'asc');
+
+        if (stateId !== undefined) {
+            query.where('cities.state_id', stateId);
+        }
+
+        return await query;
     }
 
     async getCityById(cityId: Number){
@@ -36,7 +49,10 @@ export default class CitiesService {
     }
 
     async getAllReportsByCity(cityId: Number){
-        return await connection('reports').where({ city_id: cityId }).select();
+        return await connection('reports')
+            .leftJoin('neighborhoods', 'reports.neighborhood_id', 'neighborhoods.id')
+            .where('reports.city_id', cityId)
+            .select('reports.*', 'neighborhoods.name as neighborhood_name');
     }
     
 }

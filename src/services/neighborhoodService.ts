@@ -3,8 +3,8 @@ import connection from "../connection";
 interface neighborhoodData{
     name: string,
     city_id: number,
-    latitude: number,
-    longitude: number,
+    latitude: number | null,
+    longitude: number | null,
     created_by: number
 }
 
@@ -26,6 +26,10 @@ export default class NeighborHoodService {
     }
     async delNeighborhoodById(neighborhood_id: Number, city_id: Number){
         return await connection('neighborhoods').where({ id: neighborhood_id, city_id: city_id }).delete();
+    }
+
+    async updateNeighborhood(neighborhood_id: Number, city_id: Number, data: { name?: string; latitude?: number | null; longitude?: number | null }){
+        return await connection('neighborhoods').where({ id: neighborhood_id, city_id: city_id }).update(data);
     }
 
     async TotalAccountInNeighborhood(neighborhood_id: Number, city_id: Number){

@@ -54,3 +54,57 @@ export const authenticate = async (
     return
   }
 };
+
+// Rotas públicas que precisam reconhecer o autor (ex.: pré-visualizar um
+// rascunho de notícia). Token ausente ou inválido não interrompe a requisição.
+export const optionalAuthenticate = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer")) {
+    next();
+    return;
+  }
+
+  try {
+    const decoded = authService.verifyToken(authHeader.split(" ")[1]);
+    const user = await connection("users").where({ id: decoded.userId }).first();
+
+    if (user && Number(user.role) !== Role.Banned) {
+      req.user = {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: Number(user.role),
+        avatar_url: user.avatar_url,
+        telefone: user.telefone,
+        city_id: user.city_id,
+        neighborhood_id: user.neighborhood_id
+      };
+    }
+  } catch {
+    // Segue como anônimo.
+  }
+
+  next();
+};
+
+// Deve vir depois de `authenticate`.
+export const requireRoles =
+  (...roles: Role[]) =>
+  (req: AuthRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ error: "User not authenticated." });
+      return;
+    }
+
+    if (!roles.includes(Number(req.user.role) as Role)) {
+      res.status(403).json({ error: "You don't have permissions for that action." });
+      return;
+    }
+
+    next();
+  };
