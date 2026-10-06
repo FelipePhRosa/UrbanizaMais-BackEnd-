@@ -20,27 +20,35 @@ export default class ReportService {
 
 async getAllReports(userId?: number, role?: string) {
   // Usuários comuns não veem rejeitados
-  const statuses = role === '1' 
+  const statuses = role === '1'
     ? ['aprovado', 'resolvida', 'rejeitado'] // adm vê tudo
     : ['aprovado', 'resolvida'];             // usuário comum vê só aprovadas e resolvidas
 
   const reports = await connection('reports')
-    .whereIn('status', statuses)
+    .leftJoin(
+      'neighborhoods',
+      'reports.neighborhood_id',
+      'neighborhoods.id'
+    )
+    .whereIn('reports.status', statuses)
     .select(
       'reports.*',
+      'neighborhoods.name as neighborhood_name',
       connection('likes')
         .count('*')
         .whereRaw('likes.report_id = reports.id')
         .as('likes'),
       connection.raw(
         `(SELECT EXISTS (
-            SELECT 1 FROM likes 
-            WHERE likes.report_id = reports.id AND likes.user_id = ?
+            SELECT 1
+            FROM likes
+            WHERE likes.report_id = reports.id
+              AND likes.user_id = ?
         )) as likedByCurrentUser`,
         [userId ?? 0]
       )
     )
-    .orderBy('created_at', 'desc');
+    .orderBy('reports.created_at', 'desc');
 
   return reports;
 }
