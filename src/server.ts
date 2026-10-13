@@ -2,7 +2,7 @@ import express from "express"
 import dotenv from "dotenv"
 import cors from "cors"
 import router from "./router"
-import path from "path"
+import { UPLOAD_DIR } from "./services/upload"
 import rateLimit from 'express-rate-limit';
 
 dotenv.config()
@@ -26,7 +26,7 @@ server.use(cors({
     credentials: true
 }));
 
-server.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
+server.use('/uploads', express.static(UPLOAD_DIR, {
     index: false,
     dotfiles: 'ignore',
     setHeaders: (res) => {
