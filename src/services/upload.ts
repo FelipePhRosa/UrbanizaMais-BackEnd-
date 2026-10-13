@@ -11,7 +11,10 @@ const MAX_VIDEO_SIZE_MB = Number(process.env.MAX_VIDEO_SIZE_MB) || 50;
 const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
 
-const UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads");
+// Railway injeta RAILWAY_VOLUME_ID automaticamente quando um volume está anexado; /data é o mount path
+export const UPLOAD_DIR = process.env.RAILWAY_VOLUME_ID
+  ? "/data/uploads"
+  : path.join(__dirname, "..", "..", "uploads");
 
 const IMAGE_MIMES: Record<string, string> = {
   "image/jpeg": ".jpg",
