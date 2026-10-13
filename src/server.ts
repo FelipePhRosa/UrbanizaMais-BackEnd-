@@ -38,6 +38,7 @@ server.use('/uploads', express.static(UPLOAD_DIR, {
 server.use(express.json({ limit: "1mb" }));
 server.use(router)
 
+console.log("teste")
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server Listening: ${PORT}`);
 });
