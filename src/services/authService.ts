@@ -1,10 +1,22 @@
 import bcrypt from "bcryptjs";
 import jwt, { Secret, SignOptions } from "jsonwebtoken";
 import connection from "../connection";
+import { Role } from "../enums/types";
 
 interface LoginCredentials {
-  identifier: string; 
+  identifier: string;
   password: string;
+}
+
+// Falha de autenticação conhecida: o controller traduz statusCode em resposta HTTP.
+export class AuthError extends Error {
+  public statusCode: number;
+
+  constructor(message: string, statusCode: number) {
+    super(message);
+    this.name = "AuthError";
+    this.statusCode = statusCode;
+  }
 }
 
 interface TokenPayload {
@@ -47,7 +59,7 @@ export default class AuthService {
         .first();
 
       if (!user) {
-        throw new Error("Invalid Credentials");
+        throw new AuthError("Invalid credentials", 401);
       }
 
       const isPasswordValid = await bcrypt.compare(
@@ -56,7 +68,11 @@ export default class AuthService {
       );
 
       if (!isPasswordValid) {
-        throw new Error("Invalid Credentials");
+        throw new AuthError("Invalid credentials", 401);
+      }
+
+      if (Number(user.role) === Role.Banned) {
+        throw new AuthError("Access denied: account suspended.", 403);
       }
 
       const token = this.generateToken({

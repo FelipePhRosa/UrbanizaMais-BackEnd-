@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import AuthService from '../services/authService';
+import AuthService, { AuthError } from '../services/authService';
 import OTPService from '../services/otpService';
 import connection from '../connection';
 
@@ -15,6 +15,10 @@ export default class AuthController {
   // Login tradicional
   async login(req: Request, res: Response) {
     const { identifier, password } = req.body;
+
+    if (typeof identifier !== 'string' || typeof password !== 'string' || !identifier.trim() || !password) {
+      return res.status(400).json({ error: "Identifier and password are required." });
+    }
 
     try {
       // Faz o login básico (valida credenciais)
@@ -53,8 +57,13 @@ export default class AuthController {
       });
 
     } catch (error) {
+      
       console.error("Login error:", error instanceof Error ? error.message : error);
-      return res.status(401).json({ error: "Invalid credentials" });
+
+      if (error instanceof AuthError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      return res.status(500).json({ error: "Internal server error." });
     }
   }
 }
